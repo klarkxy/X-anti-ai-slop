@@ -35,6 +35,7 @@ Object.assign(globalThis.ZhihuDetector, {
     cloudEnabled: true,
     maxChars: 2000,         // 输入窗口字数上限
     minChars: 300,          // 判定字数下限：正文少于该字数直接跳过判定（0 关闭）
+    xMinChars: 40,          // X/Twitter 推文下限（独立于知乎 300：常见长推要能打分；过短仍 skip）
     windowMode: 'full',     // 'full' | 'head'（只看开头一两段）
     /** 文章设置组（独立于回答；判定阈值/二审权重与回答共享，保证全站尺度一致） */
     articleWindowMode: 'headtail', // 'headtail' | 'full' | 'head'；headtail = 头尾各半
@@ -71,8 +72,23 @@ Object.assign(globalThis.ZhihuDetector, {
   /** 判定等级（角标样式与文案的键） */
   LEVEL: { CONFIRM_AI: 'confirm-ai', SUSPECT_AI: 'suspect-ai', NORMAL: 'normal', SKIP: 'skip', DECLARED: 'declared' },
 
-  /** 二审预算/缓存维度（回答与文章隔离，互不挤占每页上限） */
-  DIM: { ANSWER: 'answer', ARTICLE: 'article' },
+  /** 二审预算/缓存维度（回答 / 文章 / 推文隔离，互不挤占每页上限） */
+  DIM: { ANSWER: 'answer', ARTICLE: 'article', TWEET: 'tweet' },
+
+  /** 站点 id（内容脚本按 hostname 绑定适配器） */
+  SITE: { ZHIHU: 'zhihu', X: 'x' },
+
+  /** 跨站主键前缀：X handle / 推文 ID 不得与知乎 people token、回答 ID 落在同一键 */
+  NS: { X: 'x:' },
+
+  /** X 保留路径（不能当成 handle） */
+  X_RESERVED_HANDLES: new Set([
+    'home', 'explore', 'search', 'settings', 'messages', 'notifications',
+    'compose', 'i', 'intent', 'hashtag', 'login', 'signup', 'tos', 'privacy',
+    'about', 'download', 'jobs', 'help', 'account', 'topics', 'lists',
+    'communities', 'premium', 'verified', 'share', 'following', 'followers',
+    'status', 'compose', 'connect_people',
+  ]),
 
   /** 作者规则方向（屏蔽/信任，两列表互斥；存储键即这些字符串） */
   AUTHOR_KIND: { BLOCKED: 'blocked', TRUSTED: 'trusted' },
@@ -97,7 +113,7 @@ Object.assign(globalThis.ZhihuDetector, {
   /** 二审提示词系统消息（判定逻辑参考 stop-slop-zh 的中文 AI 写作信号分类；
    *  模板支持 {{ai_slot_ctx}} 保留字，调用时替换为一审结果） */
   CLOUD_SYSTEM_PROMPT: [
-    '你是"知乎 AI 答案判定"的云端二审校验器。规则初审分数落在模糊带，需要你独立判断一段知乎回答正文是"人类撰写"还是"AI 生成"。',
+    '你是 AI 内容判定的云端二审校验器。规则初审分数落在模糊带，需要你独立判断一段正文（知乎回答/文章或 X 推文）是"人类撰写"还是"AI 生成"。',
     '判定方法：逐类检查以下 AI 写作信号，命中则记入 ai_signals；同时寻找人类写作信号记入 human_signals。先评估证据，再给分数。',
     '',
     'AI 信号（按类别）：',
@@ -126,4 +142,49 @@ Object.assign(globalThis.ZhihuDetector, {
     '【一审（规则引擎）结果】',
     '{{ai_slot_ctx}}',
   ].join('\n'),
+
+  /**
+   * 从用户输入解析作者主键。知乎 people token 与 X handle 分命名空间，禁止混键。
+   * 接受：zhihu.com/people/xxx、people/xxx、裸 token（视为知乎）；
+   *      x.com/handle、twitter.com/handle、@handle、x:handle。
+   * @returns {{token:string, site:string}|null}
+   */
+  parseAuthorKey(raw) {
+    const s = String(raw || '').trim();
+    if (!s) return null;
+    const z1 = s.match(/zhihu\.com\/people\/([A-Za-z0-9_-]+)/i);
+    if (z1) return { token: z1[1], site: 'zhihu' };
+    const z2 = s.match(/(?:^|\/)people\/([A-Za-z0-9_-]+)/);
+    if (z2) return { token: z2[1], site: 'zhihu' };
+    const xUrl = s.match(/(?:^|\/\/)(?:www\.)?(?:x|twitter)\.com\/@?([A-Za-z0-9_]{1,15})(?:[/?#]|$)/i);
+    if (xUrl) {
+      const h = xUrl[1];
+      if (!this.X_RESERVED_HANDLES.has(h.toLowerCase())) {
+        return { token: this.NS.X + h.toLowerCase(), site: 'x' };
+      }
+    }
+    if (/^@[A-Za-z0-9_]{1,15}$/.test(s)) {
+      return { token: this.NS.X + s.slice(1).toLowerCase(), site: 'x' };
+    }
+    if (/^x:[A-Za-z0-9_]{1,15}$/i.test(s)) {
+      return { token: this.NS.X + s.slice(2).toLowerCase(), site: 'x' };
+    }
+    if (/^[A-Za-z0-9_-]{3,64}$/.test(s)) return { token: s, site: 'zhihu' };
+    return null;
+  },
+
+  /** 作者主键展示：x:jack → @jack；其余 people/<token> */
+  formatAuthorKey(token) {
+    const t = String(token || '');
+    if (t.startsWith(this.NS.X)) return '@' + t.slice(this.NS.X.length);
+    return 'people/' + t;
+  },
+
+  /** 覆盖主键展示：x:<id> 推文 / p<id> 文章 / 其余回答 */
+  formatOverrideKey(id) {
+    const k = String(id || '');
+    if (k.startsWith(this.NS.X)) return '推文 ' + k.slice(this.NS.X.length);
+    if (/^p\d+$/.test(k)) return '文章 ' + k.slice(1);
+    return '回答 ' + k;
+  },
 });

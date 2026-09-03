@@ -5,24 +5,24 @@
 ## Store Listing
 
 **Extension Name** [REQUIRED]
-知乎照妖镜 — 知乎 AI 答案检测
+照妖镜 — 知乎与 X 人类置信度
 
 **Short Description** [REQUIRED]
-在知乎问题页为每条回答标记"人类置信度"，一眼识别疑似 AI 生成内容，支持查看判定理由与手动覆盖。
+在知乎与 X（Twitter）为每条内容标记"人类置信度"，一眼识别疑似 AI 生成内容，支持查看判定理由与手动覆盖。
 
 **Detailed Description** [REQUIRED]
-在知乎问题页为每条回答给出"人类置信度"判定（0–100，100 = 几乎确定人工），并用角标标记判定等级：红色确定 AI、橙色疑似 AI、绿色正常。
+在知乎（问题页/时间线/文章）与 X（时间线/主页/推文页）为每条内容给出"人类置信度"判定（0–100，100 = 几乎确定人工），并用角标标记判定等级：红色确定 AI、橙色疑似 AI、绿色正常。
 
 主要功能：
-- 自动分析页面已加载的回答，滚动加载的新回答自动补标
+- 自动分析页面已加载的内容，滚动加载的新回答/新推文自动补标
 - 点击角标查看判定理由：本地校准打分的逐特征贡献清单（正 = 偏向人类，负 = 偏向 AI）
-- 模糊判定的回答可请求云端 LLM 复核（默认 DeepSeek，需在设置中配置 API Key，仅在模糊带内发送正文）
+- 模糊判定可请求云端 LLM 复核（默认 DeepSeek，需在设置中配置 API Key，仅在模糊带内发送正文）
 - 对判定结果不满意？一键覆盖为"认为人工 / 认为 AI"，记录保存在本机，刷新页面仍生效
-- 设置页可调阈值、模糊带、分析字数上限等
+- 设置页可调阈值、模糊带、知乎/X 各自的字数下限等
 
 使用方法：
-1. 安装扩展，打开任意知乎问题页
-2. 每条回答上方自动出现判定角标
+1. 安装扩展，打开知乎问题页或 x.com 时间线
+2. 每条内容上方自动出现判定角标
 3. 点击角标展开理由面板，可手动覆盖判定
 4. 在设置中配置 API Key 后，模糊判定启用云端复核
 
@@ -35,7 +35,7 @@
 Productivity
 
 **Single Purpose** [REQUIRED]
-在知乎问题页标记回答的人类置信度，帮助识别疑似 AI 生成内容。
+在知乎与 X 标记内容的人类置信度，帮助识别疑似 AI 生成内容。
 
 **Primary Language** [REQUIRED]
 中文（简体）
@@ -60,7 +60,9 @@ Productivity
 | Permission | Type | Justification |
 |------------|------|---------------|
 | storage | permissions | 保存用户设置（阈值/API 配置）、判定覆盖记录与二审缓存到本机 |
-| https://*.zhihu.com/* | host_permissions | 在知乎问题页注入内容脚本，读取回答正文并在页面上渲染判定角标 |
+| https://*.zhihu.com/* | host_permissions | 在知乎页面注入内容脚本，读取回答/文章正文并渲染判定角标 |
+| https://x.com/* | host_permissions | 在 X 时间线/主页/推文页注入内容脚本，读取推文正文并渲染判定角标 |
+| https://twitter.com/* | host_permissions | 兼容 twitter.com 域名，同上 |
 | https://api.deepseek.com/* | host_permissions | 云端二审（默认 DeepSeek API）发送模糊带内回答正文，用于 LLM 复核判定 |
 | https://*/* | optional_host_permissions | 用户可配置任意 OpenAI 兼容 API 地址（如 OpenAI/Azure/自建服务）；仅当用户在设置页填入该域名并授权时才生效，用于二审请求 |
 

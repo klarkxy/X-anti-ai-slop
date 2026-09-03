@@ -3,16 +3,16 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>知乎照妖镜 — 设置</title>
+  <title>照妖镜 — 设置</title>
   <link rel="stylesheet" href="options.css" />
 </head>
 <body>
   <main class="wrap">
     <header class="page-head">
-      <img src="../../icons/icon-128.png" alt="知乎照妖镜" class="page-logo" />
+      <img src="../../icons/icon-128.png" alt="照妖镜" class="page-logo" />
       <div class="page-head-text">
-        <h1>知乎照妖镜 · 设置</h1>
-        <p class="hint">所有配置保存在本机（chrome.storage.local），修改后点击"保存设置"生效。</p>
+        <h1>照妖镜 · 设置</h1>
+        <p class="hint">知乎 + X（Twitter）。所有配置保存在本机（chrome.storage.local），修改后点击"保存设置"生效。</p>
       </div>
     </header>
 
@@ -32,7 +32,7 @@
     <section class="card">
       <h2>云端二审</h2>
       <p class="hint">
-        规则初审分数落在模糊带内时，将回答正文发送至你配置的 LLM 服务（默认 DeepSeek）复核。
+        规则初审分数落在模糊带内时，将正文发送至你配置的 LLM 服务（默认 DeepSeek）复核。
         未配置 API Key 时仅使用本地规则。
         模糊带默认下限 10、上限 55：下限低于确定阈值 30——确定区左段（10–29 分）
         可能是校准误报，入带也送云端复核挽救；上限高于疑似阈值 50——疑似区右段
@@ -101,8 +101,12 @@
         <input type="number" id="maxChars" min="200" max="10000" step="100" />
       </label>
       <label class="row">
-        <span>判定字数下限（回答少于该字数跳过判定，0 关闭）</span>
+        <span>知乎回答判定字数下限（少于该字数跳过，0 关闭）</span>
         <input type="number" id="minChars" min="0" max="5000" step="50" />
+      </label>
+      <label class="row">
+        <span>X 推文判定字数下限（少于该字数跳过，0 关闭；默认 40，不用知乎的 300）</span>
+        <input type="number" id="xMinChars" min="0" max="5000" step="10" />
       </label>
       <label class="row">
         <span>分析模式</span>
@@ -190,12 +194,12 @@
     <section class="card">
       <h2>作者管理</h2>
       <p class="hint">
-        屏蔽 / 信任某个作者（以主页 <code>zhihu.com/people/xxx</code> 为唯一身份）。
-        屏蔽 = 该作者全部回答正文收起、只留一条「已屏蔽」提示，不做任何检测；信任 = 一轮不跑、仅显示灰色小签「已信任」。
-        作者级规则<strong>优先于</strong>卡片覆盖与引擎判定；与回答卡片面板上的「屏蔽该作者 / 信任该作者」双向同步。
+        屏蔽 / 信任某个作者。知乎以 <code>zhihu.com/people/xxx</code> 为身份；X 以 <code>@handle</code> 为身份（存储键 <code>x:handle</code>，不与知乎 token 混用）。
+        屏蔽 = 该作者内容正文收起、只留一条「已屏蔽」提示，不做任何检测；信任 = 一轮不跑、仅显示灰色小签「已信任」。
+        作者级规则<strong>优先于</strong>卡片覆盖与引擎判定；与角标面板上的「屏蔽该作者 / 信任该作者」双向同步。
       </p>
       <div class="author-add">
-        <input type="text" id="authorUrl" placeholder="https://www.zhihu.com/people/xxx 或 people/xxx" spellcheck="false" />
+        <input type="text" id="authorUrl" placeholder="zhihu.com/people/xxx 或 @handle / x.com/handle" spellcheck="false" />
         <select id="authorKind">
           <option value="blocked">屏蔽</option>
           <option value="trusted">信任</option>
@@ -209,7 +213,7 @@
 
     <section class="card">
       <h2>覆盖管理</h2>
-      <p class="hint">你手动覆盖引擎判定的回答（按回答 ID 持久化，优先级高于引擎判定与二审）。</p>
+      <p class="hint">你手动覆盖引擎判定的内容（按回答 / 文章 / 推文 ID 持久化，优先级高于引擎判定与二审）。</p>
       <ul id="overrideList" class="override-list"></ul>
       <p id="overrideEmpty" class="hint">暂无覆盖记录。</p>
       <div class="data-actions">
