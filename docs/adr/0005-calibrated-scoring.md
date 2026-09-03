@@ -67,3 +67,11 @@ flash 漏判 38.1%→21.2%（-16.9pp）；旧 AI 泛化反而改善（统计特�
 - 人类正常 83.4%（vs v3 89%），增量误报入疑似区由二审 [10,55] 兜底。
 
 **关联**：调研 `.scratch/research/statistical-scoring-feasibility.md`；实现 `.scratch/calibrated-scoring/`（spec + 票 01/02/03/06/07/08/09/10）；复现 `eval/` 管线（convert → features → fit → robustness）；v3 重拟合 `eval/pilot/fit-flash-only.js`；v4 统计特征 `eval/pilot/fit-stat-features-v4b.js`。
+
+## v4 补丁（2026-09-03，中文 humanizer 新信号）
+
+**背景**：中文 humanizer / 维基「AI生成文的特徵」里仍有一审 21 维未覆盖的可计数信号（证据越界、假案例、翻译腔、解释腔/上帝视角、说明书结构）。这些是特征，不是出现即死刑。
+
+**决策**：新痕迹进 `traces.js`，与旧 21 维一样可 `test()` 计数。本轮仓库无 C-ReD `dataset.jsonl` / flash `answers.jsonl`，**不重拟合、不改 v4 `weights` / `statWeights` / intercept**。标 `scoring: 'post-sigmoid'`，sigmoid 之后按 `weight×min(count,cap)` 小扣分（与自定义正则同一出口）。说明书结构 `minChars=200`，避免 X 默认 40 字吃不稳统计量。勿把禁冒号/破折号/禁第一第二第三当铁律；勿合入网文 deslop 与 aigc-reduce。
+
+**下次联合拟合**：`.scratch/calibrated-scoring/eval/pilot/fit-v5-new-traces.js`。方向不稳（跨种子 sd > |mean|）或基率近 0 置零，禁止硬塞正权重。

@@ -13,6 +13,12 @@
  * 旧域（旧 9 LLM）泛化已知限制：检测器押注国内主用 flash 类新模型；
  *   统计特征对旧 AI 亦有判别力（旧 AI 正常 74%→45%）
  * 评估：.scratch/calibrated-scoring/eval/pilot/fit-stat-features-v4b.js
+ *
+ * 本轮未改这张表。evidence-overclaim / fake-anecdote / translationese /
+ * god-perspective / manual-outline 五条新痕迹不在 weights 里——无 C-ReD+flash
+ * jsonl 无法联合拟合；引擎按 scoring:'post-sigmoid' 在 sigmoid 后小幅扣分。
+ * 下次聚合拟合见 eval/pilot/fit-v5-new-traces.js（数据齐则连合拟合，
+ * 方向不稳或基率近 0 置零，禁止硬塞正权重）。
  */
 (() => {
 'use strict';

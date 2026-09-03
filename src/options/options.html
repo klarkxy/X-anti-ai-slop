@@ -152,14 +152,14 @@
     <section class="card">
       <h2>自定义 AI 痕迹规则</h2>
       <p class="hint">
-        新增/编辑/删除自己的判定正则，与内置规则共同参与扣分（每次命中扣 weight 分，最多计入 cap 次）。
-        正则需为 JavaScript 语法，保存前会校验。
+        新增/编辑/删除自己的判定正则。自定义规则与 5 条待拟合内置痕迹一样，在校准 sigmoid 之后按 weight 小幅扣分（最多计入 cap 次）。
+        另 21 条内置痕迹走 v4 拟合权重。正则需为 JavaScript 语法，保存前会校验。
       </p>
       <ul id="traceList" class="trace-list"></ul>
       <p id="traceEmpty" class="hint">暂无自定义规则。</p>
 
       <details class="builtin-traces">
-        <summary>内置规则（21 类，只读参考）</summary>
+        <summary>内置规则（26 类：21 校准 + 5 待拟合小扣分，只读参考）</summary>
         <ul id="builtinTraceList" class="builtin-list"></ul>
       </details>
 

@@ -638,7 +638,8 @@
       const sign = v >= 0 ? '+' : '';
       // 统计特征（票 10）：连续值无命中次数，显示数值；词法特征显示 ×次数
       if (h.value !== undefined) return `${h.name} ${h.value}：${sign}${v.toFixed(2)}`;
-      return `${h.name} ×${h.count}：${sign}${Number.isInteger(v) ? v : v.toFixed(2)}`;
+      const body = `${h.name} ×${h.count}：${sign}${Number.isInteger(v) ? v : v.toFixed(2)}`;
+      return h.scoring === 'post-sigmoid' ? `${body}（sigmoid 后小扣分）` : body;
     }
     return `${h.name} -${h.deduct} 分`;
   }
@@ -873,7 +874,9 @@
       if (result.hits[0].contribution !== undefined) {
         const note = document.createElement('p');
         note.className = 'zys-empty';
-        note.textContent = '特征贡献：正 = 偏向人类，负 = 偏向 AI；分数 = 校准概率 × 100';
+        note.textContent = result.hits.some((h) => h.scoring === 'post-sigmoid')
+          ? '特征贡献：正 = 偏向人类，负 = 偏向 AI；分数 = 校准概率 × 100。待拟合痕迹在 sigmoid 后小幅扣分，不进 v4 权重。'
+          : '特征贡献：正 = 偏向人类，负 = 偏向 AI；分数 = 校准概率 × 100';
         panel.appendChild(note);
       }
     } else if (result.source !== 'override') {

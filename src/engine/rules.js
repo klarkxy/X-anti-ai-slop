@@ -3,6 +3,9 @@
  * 校准打分（票 02，默认启用）：score = round(σ(Σ w_i·x_i + Σ sw_j·stat_j + b) × 100)，
  * 权重来自 C-ReD 逻辑回归拟合（src/engine/calibrated-weights.js），
  * 统计特征来自 src/engine/stat-features.js（票 10，方案 B）。
+ * 标了 scoring:'post-sigmoid' 的内置痕迹（本轮 5 条中文 humanizer 信号）
+ * 不进 v4 权重向量，sigmoid 之后按 weight/cap 小幅扣分——与自定义正则同一出口，
+ * 避免把未拟合新维拼进旧 21 维权重。短于 minChars 的统计型新痕迹不计。
  * 回退开关 USE_CALIBRATED = false 时回到旧加性扣分制（score = 100 − Σ deduct）。
  * 统计特征开关 USE_STAT_FEATURES = false 时退回纯词法 v3 语义。
  * 输出 { score, hits }，hits 为命中清单（用于"点击看理由"）。
@@ -41,8 +44,14 @@ ZD.engine = {
   },
 };
 
+/** 短文本门：说明书结构等统计量在 X 默认 40 字上不稳 */
+function longEnough(trace, text) {
+  return !trace.minChars || text.length >= trace.minChars;
+}
+
 /** 统计每条痕迹的命中数（内置 test 函数 / 用户正则全局匹配，共用实现） */
 function countHits(trace, text) {
+  if (!longEnough(trace, text)) return 0;
   if (typeof trace.test === 'function') return trace.test(text);
   if (trace.pattern) {
     // 用户自定义规则：正则全局匹配计数；无效正则在保存时已被拦截，此处兜底忽略
@@ -63,6 +72,8 @@ function scoreCalibrated(text, extraTraces) {
   const hits = [];
   let z = W.intercept;
   for (const trace of builtin) {
+    // 未拟合新维不得拼进旧权重：无表项 / 置零 / post-sigmoid 一律跳过 logit
+    if (ZD.isPostSigmoidTrace && ZD.isPostSigmoidTrace(trace)) continue;
     const w = W.weights[trace.id] || 0;
     if (w === 0) continue; // 置零的噪声特征跳过 test()（推理侧减负，不影响 eval 流水线）
     const count = countHits(trace, text);
@@ -85,6 +96,15 @@ function scoreCalibrated(text, extraTraces) {
     }
   }
   let score = Math.round(sigmoid(z) * 100);
+  // 待联合拟合的内置新痕迹：与自定义正则同一出口（sigmoid 后小幅扣分）
+  for (const trace of builtin) {
+    if (!(ZD.isPostSigmoidTrace && ZD.isPostSigmoidTrace(trace))) continue;
+    const count = countHits(trace, text);
+    if (count === 0) continue;
+    const deduct = Math.min(count, trace.cap) * trace.weight;
+    hits.push({ id: trace.id, name: trace.name, count, contribution: -deduct, scoring: 'post-sigmoid' });
+    score = Math.max(0, score - deduct);
+  }
   // 用户自定义正则 = 显式强信号：保留原扣分语义（分数尺度叠加，不稀释）
   for (const trace of custom) {
     const count = countHits(trace, text);

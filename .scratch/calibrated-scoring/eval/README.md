@@ -10,7 +10,8 @@
 # 2) CSV → dataset.jsonl（gitignore）
 python3 convert.py
 # 3) 特征提取：直接加载扩展自身 src/shared/constants.js + src/engine/traces.js（单一事实源），
-#    每条样本输出 21 维命中数向量（cap 前）+ 现扣分制基线分
+#    每条样本输出 21 维命中数向量（cap 前；post-sigmoid 新痕迹不进旧向量）+ 现扣分制基线分
+#    新 5 维联合拟合（数据齐时）：node pilot/fit-v5-new-traces.js
 node features.js
 # 4) 逻辑回归拟合 + 留出集评估（分层 80/20，种子可复现；平衡/全量两变体）
 node fit.js          # 产出 src/engine/calibrated-weights.js + report.json
