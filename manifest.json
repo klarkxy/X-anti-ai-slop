@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "知乎照妖镜",
-  "version": "0.1.0",
-  "description": "在知乎问题页为每条回答给出人类置信度判定，标记疑似 AI 创作，支持查看理由与手动覆盖。",
+  "name": "照妖镜",
+  "version": "0.2.0",
+  "description": "在知乎与 X（Twitter）为每条内容给出人类置信度判定，标记疑似 AI 创作，支持查看理由与手动覆盖。",
   "minimum_chrome_version": "109",
   "permissions": ["storage"],
   "optional_host_permissions": [
@@ -10,6 +10,8 @@
   ],
   "host_permissions": [
     "https://*.zhihu.com/*",
+    "https://x.com/*",
+    "https://twitter.com/*",
     "https://api.deepseek.com/*"
   ],
   "background": {
@@ -20,7 +22,11 @@
       "matches": [
         "https://*.zhihu.com/question/*",
         "https://*.zhihu.com/p/*",
-        "https://*.zhihu.com/"
+        "https://*.zhihu.com/",
+        "https://x.com/*",
+        "https://x.com/",
+        "https://twitter.com/*",
+        "https://twitter.com/"
       ],
       "js": [
         "src/shared/constants.js",
@@ -29,6 +35,9 @@
         "src/engine/calibrated-weights.js",
         "src/engine/stat-features.js",
         "src/engine/rules.js",
+        "src/content/prose.js",
+        "src/content/sites/zhihu.js",
+        "src/content/sites/twitter.js",
         "src/content/extract.js",
         "src/content/content.js"
       ],
@@ -37,7 +46,7 @@
     }
   ],
   "action": {
-    "default_title": "知乎照妖镜"
+    "default_title": "照妖镜"
   },
   "options_ui": {
     "page": "src/options/options.html",

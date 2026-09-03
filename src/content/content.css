@@ -342,3 +342,52 @@
 
 /* 新角标淡入 */
 .zys-badge { animation: zys-fade-in 0.3s ease; }
+
+/* X 深色时间线：面板/占位条用深底，避免白块刺眼。角标本身带等级色底，保持同款。 */
+html.zys-site-x .zys-panel,
+html.zys-site-x .zys-trusted-panel {
+  background: #15202b;
+  color: #e7e9ea;
+  border-color: #38444d;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+html.zys-site-x .zys-panel-title,
+html.zys-site-x .zys-evidence-title {
+  color: #e7e9ea;
+}
+
+html.zys-site-x .zys-empty,
+html.zys-site-x .zys-evidence-list li {
+  color: #8b98a5;
+}
+
+html.zys-site-x .zys-cloud {
+  color: #e7e9ea;
+  background: rgba(29, 155, 240, 0.1);
+}
+
+html.zys-site-x .zys-declared-quote {
+  color: #e7e9ea;
+}
+
+html.zys-site-x .zys-rule-blocked .zys-blocked {
+  background: #1e2732;
+  border-color: #38444d;
+  color: #e7e9ea;
+}
+
+html.zys-site-x .zys-rule-blocked .zys-blocked .zys-blocked-label {
+  color: #e7e9ea;
+}
+
+html.zys-site-x .zys-rule-blocked .zys-blocked button {
+  background: transparent;
+}
+
+html.zys-site-x .zys-actions button:disabled,
+html.zys-site-x .zys-actions button:disabled:hover {
+  background: #1e2732;
+  border-color: #38444d;
+  color: #8b98a5;
+}

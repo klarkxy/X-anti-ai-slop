@@ -21,6 +21,7 @@
     'cloudPerPageLimit',
     'maxChars',
     'minChars',
+    'xMinChars',
     // 文章设置组（独立于回答；阈值/权重共享）
     'articleWindowMode',
     'articleMinChars',
@@ -294,7 +295,7 @@
       const info = document.createElement('span');
       info.className = 'ov-info';
       const when = ov.ts ? new Date(ov.ts).toLocaleString('zh-CN') : '未知时间';
-      info.textContent = `回答 ${answerId} — ${ov.verdict === ZD.VERDICT.AI ? '认为 AI' : '认为人工'}（${when}）`;
+      info.textContent = `${ZD.formatOverrideKey(answerId)} — ${ov.verdict === ZD.VERDICT.AI ? '认为 AI' : '认为人工'}（${when}）`;
       const del = document.createElement('button');
       del.type = 'button';
       del.className = 'mini';
@@ -312,20 +313,12 @@
   // ---------- 作者管理 ----------
 
   /**
-   * 从输入解析作者 token（people 主键）。
-   * 接受：完整/协议相对主页链接（zhihu.com 子串同时覆盖 www 与 zhuanlan 子域）、
-   * people/xxx 片段、或裸 token。
+   * 从输入解析作者主键。知乎 people token 与 X handle 分命名空间。
    * @returns {string|null} 非法格式返回 null
    */
   function parseAuthorInput(raw) {
-    const s = (raw || '').trim();
-    if (!s) return null;
-    const m = s.match(/zhihu\.com\/people\/([A-Za-z0-9_-]+)/);
-    if (m) return m[1];
-    const m2 = s.match(/people\/([A-Za-z0-9_-]+)/);
-    if (m2) return m2[1];
-    if (/^[A-Za-z0-9_-]{3,64}$/.test(s)) return s;
-    return null;
+    const parsed = ZD.parseAuthorKey(raw);
+    return parsed ? parsed.token : null;
   }
 
   async function renderAuthorRules() {
@@ -348,7 +341,7 @@
       kindEl.className = 'author-kind ' + (en.kind === ZD.AUTHOR_KIND.BLOCKED ? 'kind-blocked' : 'kind-trusted');
       kindEl.textContent = en.kind === ZD.AUTHOR_KIND.BLOCKED ? '屏蔽' : '信任';
       const tokenEl = document.createElement('code');
-      tokenEl.textContent = 'people/' + en.token;
+      tokenEl.textContent = ZD.formatAuthorKey(en.token);
       const whenEl = document.createElement('span');
       whenEl.className = 'author-when';
       whenEl.textContent = en.ts ? new Date(en.ts).toLocaleString('zh-CN') : '未知时间';
@@ -374,7 +367,7 @@
     const token = parseAuthorInput(raw);
     const errEl = $('authorError');
     if (!token) {
-      errEl.textContent = '无法识别作者主页：需为 zhihu.com/people/xxx 格式（可粘贴完整链接或 people/xxx）。';
+      errEl.textContent = '无法识别作者：知乎用 zhihu.com/people/xxx；X 用 @handle 或 x.com/handle。';
       errEl.hidden = false;
       return;
     }

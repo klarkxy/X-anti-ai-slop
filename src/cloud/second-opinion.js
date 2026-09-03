@@ -20,7 +20,7 @@ ZD.cloud = {
    * @param {object} settings
    * @param {{ruleScore:number, hits:Array<{id:string,name:string,deduct:number}>}} [ruleContext] 一审结果
    * @param {boolean} [force] 手动"重新判定"：跳过缓存直接调用（结果覆盖写回缓存）
-   * @param {string} [dimension] 预算维度 'answer' | 'article'（回答与文章预算隔离）
+   * @param {string} [dimension] 预算维度 'answer' | 'article' | 'tweet'（互不挤占每页上限）
    * @returns {Promise<{score:number, aiSignals:string[], humanSignals:string[], cached?:boolean}|null>}
    */
   async secondOpinion(text, tabId, settings, ruleContext, force, dimension) {

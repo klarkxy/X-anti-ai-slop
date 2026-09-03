@@ -1,9 +1,10 @@
 /**
- * 知乎照妖镜 — 内容脚本主逻辑
- * 流程：发现回答卡片 → 作者规则 → 覆盖 → 创作声明跳过 → 提取输入窗口 →
+ * 照妖镜 — 内容脚本主逻辑
+ * 流程：发现卡片 → 作者规则 → 覆盖 → 创作声明跳过 → 提取输入窗口 →
  *      规则初审 → （模糊带且已配置 API）请求云端二审 → 渲染角标 / 理由面板 / 覆盖。
+ * 站点差异（知乎 / X）由 ZD.extract 适配器承担。
  * 依赖（按 manifest 加载顺序）：constants.js, storage.js, traces.js,
- *      rules.js, extract.js。
+ *      rules.js, prose.js, sites/*.js, extract.js。
  */
 'use strict';
 
@@ -33,6 +34,9 @@
      *  声明挂在 .ContentItem-time 内，作者可后续添加/移除——观察器按此
      *  翻转触发重扫（声明被移除后自动回到正常判定）。 */
     cardDeclared: new WeakMap(),
+    /** 卡片 → 最近一次分析时的内容 ID（X 虚拟列表可能复用 article 节点；
+     *  ID 变化视为新推，必须重分析）。 */
+    cardId: new WeakMap(),
     /** 文章详情页状态（同一时刻至多一篇；SPA 导航时按 pathname 重建） */
     article: { id: null, card: null, analyzed: false, text: '', declared: false, inFlight: null },
     /** 上次见到的 pathname（文章页 SPA 导航检测） */
@@ -152,33 +156,28 @@
   }
 
   /**
-   * 卡片输入窗口提取（按类型路由）：文章列表卡走文章设置组（headtail 抽样、
-   * 文章上限/下限），回答卡走回答设置组。正文变化重分析指纹也用它，
+   * 卡片输入窗口提取（按站点/类型路由）。正文变化重分析指纹也用它，
    * 保证指纹与判定使用同一输入窗口。
    */
   function extractCardText(card) {
-    return isArticleListCard(card)
-      ? ZD.extract.extractArticleListText(card, state.settings)
-      : ZD.extract.extractText(card, state.settings);
+    return ZD.extract.extractCardText(card, state.settings);
   }
 
-  /** 文章列表卡识别（与详情页容器 .Post-Main 区分） */
-  function isArticleListCard(card) {
-    return !!card.classList.contains('ArticleItem');
+  function rememberCard(card, text, overrideKey) {
+    state.analyzed.add(card);
+    state.cardText.set(card, text);
+    if (overrideKey) state.cardId.set(card, overrideKey);
   }
 
   /**
-   * 分析单张回答/文章卡片，产出结果并渲染。
-   * 文章列表卡与回答卡共用管线，差异：ID 命名空间（'p'+文章ID）、
-   * 文章设置组（抽样/上限/下限）、二审预算维度（article 隔离）。
+   * 分析单张卡片，产出结果并渲染。
+   * 站点差异（知乎回答/文章列表卡 / X 推文）由适配器提供 ID、下限、名词、二审维度。
    * @returns {Promise<void>}
    */
   async function analyzeCard(card) {
     if (state.inFlight.has(card)) return state.inFlight.get(card);
     const p = (async () => {
-      const isArticle = isArticleListCard(card);
-      const rawId = isArticle ? ZD.extract.getArticleId(card) : ZD.extract.getAnswerId(card);
-      const overrideKey = isArticle && rawId ? articleOverrideKey(rawId) : rawId;
+      const overrideKey = ZD.extract.getContentId(card);
       // 声明状态随分析记录：观察器按此检测「作者后续添加/移除创作声明」的翻转
       state.cardDeclared.set(card, ZD.extract.hasAiDeclaration(card));
 
@@ -190,8 +189,7 @@
       const override = overrideKey ? state.overrides[overrideKey] : null;
       if (override) {
         renderBadge(card, overrideResult(overrideKey, override));
-        state.analyzed.add(card);
-        state.cardText.set(card, extractCardText(card));
+        rememberCard(card, extractCardText(card), overrideKey);
         return;
       }
 
@@ -201,27 +199,24 @@
       //    正文变化重分析同样跳过。声明状态翻转由观察器驱动（见下）。
       if (state.cardDeclared.get(card)) {
         renderDeclarationBadge(card, overrideKey);
-        state.analyzed.add(card);
-        state.cardText.set(card, extractCardText(card));
+        rememberCard(card, extractCardText(card), overrideKey);
         return;
       }
 
       // 3) 文本稳定化。正文提取为空（无正文块）→ 不判定也不显示角标
       const text = await extractStableText(() => extractCardText(card));
       if (!text) {
-        state.analyzed.add(card);
-        state.cardText.set(card, '');
+        rememberCard(card, '', overrideKey);
         return;
       }
 
       // 4) 字数下限：内容本身少于 minChars 判 AI 无意义，以"跳过"角标标记（0 关闭）。
-      //    回答用回答下限、文章列表卡用文章下限（折叠摘要常 <300 → 跳过）
-      const minChars = isArticle ? state.settings.articleMinChars || 0 : state.settings.minChars || 0;
-      const rawLen = isArticle ? ZD.extract.articleListRawLength(card) : ZD.extract.rawLength(card);
+      //    知乎回答/文章/X 推文各用适配器下限（推文默认 40，不用回答的 300）
+      const minChars = ZD.extract.minChars(state.settings, card);
+      const rawLen = ZD.extract.rawLength(card);
       if (minChars > 0 && rawLen < minChars) {
-        state.analyzed.add(card);
-        state.cardText.set(card, text);
-        renderSkippedBadge(card, minChars, isArticle ? '文章' : undefined);
+        rememberCard(card, text, overrideKey);
+        renderSkippedBadge(card, minChars, ZD.extract.noun(card));
         return;
       }
 
@@ -236,20 +231,19 @@
 
       // 6) 云端二审：已配置 API 且（手动"重新判定"强制 或 分数落入模糊带）。
       //    经内容侧队列限流，不丢弃；携带一审结果作上下文。
-      //    文章卡二审走 article 预算维度（与回答隔离）。
+      //    文章/推文走独立预算维度（与回答隔离）。
       const forceRejudge = state.forceRejudge.delete(overrideKey);
       const cloudOn = state.settings.cloudEnabled && !!state.settings.apiKey;
       if (overrideKey && cloudOn && (forceRejudge || cloudEligible(rule.score, state.settings))) {
         // 初次分析：二审等待期先渲染"规则分 + 二审中"角标作为反馈
         // （手动"重新判定"已有独立大 loading，不重复渲染）
         if (!forceRejudge) renderPendingBadge(card, overrideKey, rule.score);
-        const cloud = await cloudQueue.request(text, rule, forceRejudge, isArticle ? ZD.DIM.ARTICLE : ZD.DIM.ANSWER);
+        const cloud = await cloudQueue.request(text, rule, forceRejudge, ZD.extract.cloudDimension(card));
         if (cloud) result = cloudResult(overrideKey, rule, cloud);
       }
 
       renderBadge(card, result);
-      state.analyzed.add(card);
-      state.cardText.set(card, text);
+      rememberCard(card, text, overrideKey);
     })();
     state.inFlight.set(card, p);
     try {
@@ -263,12 +257,12 @@
 
   /** 是否文章详情页（/p/<id>；www 与 zhuanlan.zhihu.com 同构 Post-* 布局） */
   function isArticlePage() {
-    return /^\/p\/\d+/.test(location.pathname);
+    return !!(ZD.extract.hasArticleDetail && /^\/p\/\d+/.test(location.pathname));
   }
 
   /** 文章容器识别：含文章标题且无回答正文（回答卡与文章卡不重叠） */
   function isArticleCard(card) {
-    return !!card.querySelector(ZD.extract.ARTICLE_TITLE_SELECTOR) && !card.querySelector(ZD.extract.BODY_SELECTOR);
+    return !!(ZD.extract.isArticleCard && ZD.extract.isArticleCard(card));
   }
 
   /** 文章覆盖键：'p'+id 前缀隔离命名空间（与回答 ID 不冲突） */
@@ -276,9 +270,9 @@
     return 'p' + articleId;
   }
 
-  /** 事件元素所属容器：回答卡或文章卡（两者共用同一套面板/占位组件） */
+  /** 事件元素所属容器：由站点适配器解析（知乎回答/文章卡，或 X 顶层推文） */
   function cardOf(el) {
-    return el.closest(ZD.extract.CARD_SELECTOR) || el.closest(ZD.extract.ARTICLE_CARD_SELECTOR);
+    return ZD.extract.cardOf(el);
   }
 
   /**
@@ -415,7 +409,7 @@
 
   /** 卡片正文元素（未渲染正文时返回 null） */
   function bodyOf(card) {
-    return card.querySelector(ZD.extract.BODY_SELECTOR);
+    return ZD.extract.bodyEl(card);
   }
 
   /** 移除卡片上的角标/面板/加载占位（全量清理；"重新判定"等需要换 loading 的场景） */
@@ -443,15 +437,12 @@
   }
 
   /** 把元素插到正文前；无正文时置于卡片顶部（badge/panel/loading 统一入口）。
-   *  文章详情页容器无回答正文 → 插到标题前（角标/面板在标题/作者区旁）。 */
+   *  文章详情页容器无回答正文 → 插到标题前（角标/面板在标题/作者区旁）。
+   *  X 推文插到 tweetText 前（作者行下方）。 */
   function insertBeforeBody(card, el) {
-    const anchor = bodyOf(card);
+    const anchor = ZD.extract.insertAnchor(card);
     if (anchor) anchor.insertAdjacentElement('beforebegin', el);
-    else {
-      const title = card.querySelector(ZD.extract.ARTICLE_TITLE_SELECTOR);
-      if (title) title.insertAdjacentElement('beforebegin', el);
-      else card.prepend(el);
-    }
+    else card.prepend(el);
   }
 
   // ---------- 作者规则 UI ----------
@@ -495,6 +486,8 @@
     const rule = authorRuleFor(author.token);
     if (!rule) return false;
     applyAuthorRuleUI(card, author, rule);
+    const id = ZD.extract.getContentId(card);
+    if (id) state.cardId.set(card, id);
     return true;
   }
 
@@ -505,7 +498,7 @@
    * 幂等；[查看] 展开态（.zys-viewing）由 CSS 门控，重复调用不打断展开。
    */
   function collapseBlockedBody(card) {
-    const body = bodyOf(card) || card.querySelector(ZD.extract.ARTICLE_BODY_SELECTOR);
+    const body = ZD.extract.collapsibleBody(card);
     if (!body) return;
     const wrapper = body.closest('.RichContent') || body;
     wrapper.dataset.zysCollapsed = '1';
@@ -1126,6 +1119,7 @@
         reanalyzeTimers.delete(card);
         state.analyzed.delete(card);
         state.inFlight.delete(card);
+        state.ruleApplied.delete(card);
         analyzeCards([card]);
       }, 700)
     );
@@ -1133,10 +1127,10 @@
 
   function processAddedNodes(nodes) {
     // 文章详情页：SPA 导航（pathname 变化）或文章容器出现/替换 → 分析；
-    // 离开文章页 → 清理文章规则 UI
+    // 离开文章页 → 清理文章规则 UI。X 无文章详情，整段跳过。
     const pathChanged = location.pathname !== state.lastPath;
     state.lastPath = location.pathname;
-    if (isArticlePage()) {
+    if (ZD.extract.hasArticleDetail && isArticlePage()) {
       const cur = document.querySelector(ZD.extract.ARTICLE_CARD_SELECTOR);
       if (pathChanged) analyzeArticle(true);
       else if (cur && cur !== state.article.card) analyzeArticle();
@@ -1149,7 +1143,7 @@
       else if (state.article.card && ZD.extract.hasAiDeclaration(state.article.card) !== !!state.article.declared) {
         analyzeArticle(true);
       }
-    } else if (state.article.analyzed && state.article.card) {
+    } else if (ZD.extract.hasArticleDetail && state.article.analyzed && state.article.card) {
       cleanupArticleUI(state.article.card);
       state.article = { id: null, card: null, analyzed: false, text: '', declared: false, inFlight: null };
     }
@@ -1164,9 +1158,19 @@
         const card = node.closest(ZD.extract.CARD_SELECTOR);
         // 屏蔽卡的正文懒渲染/被替换：重新打收起标记（不触发重分析，也不打断 [查看] 展开态）
         if (card && card.classList.contains('zys-rule-blocked')) collapseBlockedBody(card);
-        // 作者规则已应用的卡片（屏蔽/信任）不随正文变化重分析：
-        // 规则由存储变化驱动，与内容无关（也避免重渲染打断占位条 [查看] 态）
-        if (card && state.analyzed.has(card) && !state.ruleApplied.has(card) && !seen.has(card)) {
+        if (card && state.analyzed.has(card) && !seen.has(card)) {
+          // X 虚拟列表可能复用同一 article 节点换一条推：ID 变了必须重分析
+          //（含原作者规则卡——新推作者可能不同）。
+          const newId = ZD.extract.getContentId(card);
+          if (newId && state.cardId.get(card) && state.cardId.get(card) !== newId) {
+            seen.add(card);
+            state.ruleApplied.delete(card);
+            scheduleReanalyze(card);
+            continue;
+          }
+          // 作者规则已应用的卡片（屏蔽/信任）不随正文变化重分析：
+          // 规则由存储变化驱动，与内容无关（也避免重渲染打断占位条 [查看] 态）
+          if (state.ruleApplied.has(card)) continue;
           seen.add(card);
           // 只有正文输入窗口文本真的变化（如折叠预览展开）才重分析。
           // 知乎会在 .RichContent 内追加操作栏/热评/Sticky 等 UI 节点，
@@ -1180,17 +1184,35 @@
         }
       }
       for (const card of ZD.extract.findCards(node)) {
-        if (!state.analyzed.has(card) && !seen.has(card)) {
+        if (seen.has(card)) continue;
+        if (!state.analyzed.has(card)) {
           seen.add(card);
           cards.push(card);
+          continue;
+        }
+        // 已分析节点被 SPA 复用成另一条内容（X 时间线虚拟列表）
+        const newId = ZD.extract.getContentId(card);
+        if (newId && state.cardId.get(card) && state.cardId.get(card) !== newId) {
+          seen.add(card);
+          state.ruleApplied.delete(card);
+          scheduleReanalyze(card);
         }
       }
-      // 新增节点在卡片内部（正文晚于卡壳渲染，如文章列表卡摘要后置）：
+      // 新增节点在卡片内部（正文晚于卡壳渲染，如文章列表卡摘要后置 / 推文文本后至）：
       // findCards 只查后代、找不到祖先卡 → 向上回溯最近未分析的卡片
       const anc = node.closest(ZD.extract.CARD_SELECTOR);
-      if (anc && !state.analyzed.has(anc) && !seen.has(anc) && anc.querySelector(ZD.extract.BODY_SELECTOR)) {
-        seen.add(anc);
-        cards.push(anc);
+      if (anc && !seen.has(anc) && ZD.extract.bodyEl(anc)) {
+        if (!state.analyzed.has(anc)) {
+          seen.add(anc);
+          cards.push(anc);
+        } else {
+          const newId = ZD.extract.getContentId(anc);
+          if (newId && state.cardId.get(anc) && state.cardId.get(anc) !== newId) {
+            seen.add(anc);
+            state.ruleApplied.delete(anc);
+            scheduleReanalyze(anc);
+          }
+        }
       }
       }
     // 创作声明翻转（作者后续添加/移除「包含 AI 辅助创作」，变化发生在时间区而非
@@ -1285,6 +1307,9 @@
     state.settings = await ZD.storage.getSettings();
     state.overrides = await ZD.storage.getOverrides();
     state.authorRules = await ZD.storage.getAuthorRules();
+    if (ZD.extract.siteId === ZD.SITE.X) {
+      document.documentElement.classList.add('zys-site-x');
+    }
     startObserver();
     analyzeAll();
     analyzeArticle();
