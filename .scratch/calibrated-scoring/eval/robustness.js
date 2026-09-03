@@ -15,6 +15,7 @@ const IN = path.join(__dirname, 'features.jsonl');
 require(path.join(ROOT, 'src/shared/constants.js'));
 require(path.join(ROOT, 'src/engine/traces.js'));
 const ZD = globalThis.ZhihuDetector;
+const LEX = ZD.traces.filter((t) => !(ZD.isPostSigmoidTrace && ZD.isPostSigmoidTrace(t)));
 
 function rng(seed) {
   let a = seed >>> 0;
@@ -66,7 +67,7 @@ function fitLogistic(X, y) {
   const D = rows[0].x.length;
 
   const seeds = [1, 2, 3, 4, 5];
-  const wByFeature = ZD.traces.map(() => []);
+  const wByFeature = LEX.map(() => []);
   const aurocs = [];
   for (const seed of seeds) {
     const rand = rng(seed);
@@ -102,7 +103,7 @@ function fitLogistic(X, y) {
 
   console.log('AUROC across seeds:', aurocs.map((v) => v.toFixed(4)).join(' '));
   console.log('\n标准化权重（5 种子 min/max/符号一致?）—— 负 = AI 信号');
-  ZD.traces.forEach((t, i) => {
+  LEX.forEach((t, i) => {
     const vals = wByFeature[i];
     const lo = Math.min(...vals), hi = Math.max(...vals);
     const stable = (lo < 0 && hi < 0) || (lo > 0 && hi > 0);

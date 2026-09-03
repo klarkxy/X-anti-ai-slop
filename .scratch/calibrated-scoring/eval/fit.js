@@ -22,6 +22,7 @@ const REPORT_OUT = path.join(__dirname, 'report.json');
 require(path.join(ROOT, 'src/shared/constants.js'));
 require(path.join(ROOT, 'src/engine/traces.js'));
 const ZD = globalThis.ZhihuDetector;
+const LEX = ZD.traces.filter((t) => !(ZD.isPostSigmoidTrace && ZD.isPostSigmoidTrace(t)));
 
 // ---------- 工具 ----------
 
@@ -252,7 +253,7 @@ async function main() {
   // 置零特征：基率≈0、5 种子符号不稳的噪声特征（元评论/励志结尾/成语堆砌/死隐喻）
   const ZERO_FEATURES = new Set(['meta-commentary', 'inspirational-closer', 'idiom-cluster', 'dead-metaphor']);
   const wMap = {};
-  ZD.traces.forEach((t, i) => {
+  LEX.forEach((t, i) => {
     wMap[t.id] = ZERO_FEATURES.has(t.id) ? 0 : +baked.w[i].toFixed(6);
   });
   const weightsJs = `/**

@@ -271,11 +271,22 @@
   function renderBuiltinTraces() {
     const list = $('builtinTraceList');
     list.textContent = '';
+    const summary = document.querySelector('.builtin-traces summary');
+    if (summary) {
+      const nPost = ZD.traces.filter((t) => ZD.isPostSigmoidTrace && ZD.isPostSigmoidTrace(t)).length;
+      const nCal = ZD.traces.length - nPost;
+      summary.textContent = `内置规则（${ZD.traces.length} 类：${nCal} 校准 + ${nPost} 待拟合小扣分，只读参考）`;
+    }
     for (const t of ZD.traces) {
       const li = document.createElement('li');
       const name = document.createElement('span');
       name.className = 'ov-info';
-      name.textContent = `${t.name} — 每次扣 ${t.weight} 分（上限 ${t.cap} 次）`;
+      if (ZD.isPostSigmoidTrace && ZD.isPostSigmoidTrace(t)) {
+        const gate = t.minChars ? `，短于 ${t.minChars} 字不计` : '';
+        name.textContent = `${t.name} — sigmoid 后每次扣 ${t.weight} 分（上限 ${t.cap} 次${gate}；待联合拟合）`;
+      } else {
+        name.textContent = `${t.name} — 校准权重（v4 拟合；回退扣分每次 ${t.weight}，上限 ${t.cap}）`;
+      }
       li.appendChild(name);
       list.appendChild(li);
     }

@@ -45,12 +45,26 @@
 - 概率判断有天花板：人类正常率约 83%，主流模型漏判仍约两成
 - 作者屏蔽/信任：知乎用 `people/<token>`，X 用 `@handle`（存储键 `x:handle`），两边不会撞键
 
+## 一审怎么计分
+
+分数是「人类置信度」：`round(σ(Σ w·x + b) × 100)`，再叠自定义正则与待拟合痕迹的小幅扣分。
+
+| 信号 | 怎么计入分数 |
+|---|---|
+| 既有 21 类词法痕迹（开场套话、连接词骨架、空洞强调、商务黑话、强化词、名词化、元评论、励志结尾、排比模板、伪亲密、最高级、成语堆、死隐喻、句长齐整、句号当顿号、破折号反复、冒号、英文引号、伪口语、空洞归纳、编号式） | **拟合进 v4 权重**：命中数 × 逻辑回归权重进 logit。方向由 C-ReD 知乎人类回答 + deepseek-v4-flash 决定——冒号/句号当顿号等在该域是人类加分，不是禁令。元评论等 5 条基率近 0 / 不稳，权重置零。 |
+| 4 个统计特征（句长波动 / 标点密度 / 平均句长 / 逗号占比） | **拟合进 v4 权重**。短文本不稳；知乎默认 &lt;300 字、X 默认 &lt;40 字直接跳过整条评分。 |
+| 本轮 5 类中文 humanizer 信号（证据越界、假案例、翻译腔、解释腔/上帝视角、说明书结构） | **不进 v4 权重向量**。本轮仓库里没有 C-ReD+flash jsonl，无法联合拟合；命中后走与自定义正则同一出口——sigmoid 之后按 `weight×min(count,cap)` 小幅扣分（4/4/3/4/5，上限 2/2/3/2/1）。说明书结构短于 200 字不计（X 默认 40 字不会吃这条统计量）。下次数据齐后用 `eval/pilot/fit-v5-new-traces.js` 连合拟合；方向不稳或基率近 0 置零，不硬塞正权重。 |
+| 用户自定义正则 | 仍是 sigmoid 之后按设置的 weight/cap 扣分。 |
+
+不当铁律、未合入的写法：stop-slop-zh 禁冒号/破折号/禁「第一第二第三」；网文 deslop「眼中闪过一丝 / 深吸一口气」；aigc-reduce 类降查重手法。英文 slop 表未合入。
+
 ## 开发：提取 / 观察测试
 
 ```bash
 node .scratch/x-support/tests/twitter-extract-test.js
 node .scratch/x-support/tests/site-bind-test.js
 node .scratch/calibrated-scoring/tests/migrate-settings-test.js
+node .scratch/zh-humanizer-signals/tests/new-traces-test.js
 ```
 
 ### 手动验证（加载扩展后）
@@ -63,4 +77,4 @@ node .scratch/calibrated-scoring/tests/migrate-settings-test.js
 
 ## Credits
 
-内置的 21 类 AI 创作痕迹规则（套话连接词、编号式结构、冒号/破折号滥用、英文双引号标注等）在信号分类与判定思路上借鉴了 [stop-slop-zh](https://github.com/pencil20388-eng/stop-slop-zh)（中文版 Stop Slop，灵感源自 [hardikpandya/stop-slop](https://github.com/hardikpandya/stop-slop)）；本地参考副本见 `stop-slop-zh/`（MIT License，仅作规则设计参考，不入库）。
+内置的 21 类校准痕迹在信号分类上借鉴了 [stop-slop-zh](https://github.com/pencil20388-eng/stop-slop-zh)（灵感源自 [hardikpandya/stop-slop](https://github.com/hardikpandya/stop-slop)）。本轮 5 类中文信号分别参考 [y10reo/stop-slop-zh](https://github.com/y10reo/stop-slop-zh)（证据越界）、[ai-zixun/humanizer-zh](https://github.com/ai-zixun/humanizer-zh) 与[中文维基「AI生成文的特徵」](https://zh.wikipedia.org/wiki/Wikipedia:AI%E7%94%9F%E6%88%90%E6%96%87%E7%9A%84%E7%89%B9%E5%BE%B5)（翻译腔、说明书结构）、[LifelongLazyLearner/qu-ai-wei](https://github.com/LifelongLazyLearner/qu-ai-wei)（解释腔/假现场的编辑观察）。只作规则设计参考，不入库。
